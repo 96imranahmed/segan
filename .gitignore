@@ -5,6 +5,7 @@ __pycache__/
 
 # C extensions
 *.so
+*.wav
 
 # Distribution / packaging
 .Python
@@ -20,6 +21,8 @@ lib64/
 parts/
 sdist/
 var/
+data/
+data/*
 *.egg-info/
 .installed.cfg
 *.egg

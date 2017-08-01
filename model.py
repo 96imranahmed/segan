@@ -67,7 +67,7 @@ class SEGAN(Model):
         self.devices = devices
         self.z_dim = args.z_dim
         self.z_depth = args.z_depth
-        # type of deconv
+                # type of deconv
         self.deconv_type = args.deconv_type
         # specify if use biases or not
         self.bias_downconv = args.bias_downconv
@@ -127,18 +127,19 @@ class SEGAN(Model):
         #g_opt = tf.train.AdamOptimizer(config.g_learning_rate,
         #                               beta1=config.beta_1)
 
-        for idx, device in enumerate(self.devices):
-            with tf.device("/%s" % device):
-                with tf.name_scope("device_%s" % idx):
-                    with variables_on_gpu0():
-                        self.build_model_single_gpu(idx)
-                        d_grads = d_opt.compute_gradients(self.d_losses[-1],
-                                                          var_list=self.d_vars)
-                        g_grads = g_opt.compute_gradients(self.g_losses[-1],
-                                                          var_list=self.g_vars)
-                        all_d_grads.append(d_grads)
-                        all_g_grads.append(g_grads)
-                        tf.get_variable_scope().reuse_variables()
+        with tf.variable_scope(tf.get_variable_scope()) as scope:
+          for idx, device in enumerate(self.devices):
+              with tf.device("/%s" % device):
+                  with tf.name_scope("device_%s" % idx):
+                      with variables_on_gpu0():
+                          self.build_model_single_gpu(idx)
+                          d_grads = d_opt.compute_gradients(self.d_losses[-1],
+                                                            var_list=self.d_vars)
+                          g_grads = g_opt.compute_gradients(self.g_losses[-1],
+                                                            var_list=self.g_vars)
+                          all_d_grads.append(d_grads)
+                          all_g_grads.append(g_grads)
+                          tf.get_variable_scope().reuse_variables()
         avg_d_grads = average_gradients(all_d_grads)
         avg_g_grads = average_gradients(all_g_grads)
         self.d_opt = d_opt.apply_gradients(avg_d_grads)
@@ -197,7 +198,7 @@ class SEGAN(Model):
             # make a dummy copy of discriminator to have variables and then
             # be able to set up the variable reuse for all other devices
             # merge along channels and this would be a real batch
-            dummy_joint = tf.concat(2, [wavbatch, noisybatch])
+            dummy_joint = tf.concat(axis=2, values=[wavbatch, noisybatch])
             dummy = discriminator(self, dummy_joint,
                                   reuse=False)
 
@@ -207,8 +208,8 @@ class SEGAN(Model):
         self.zs.append(z)
 
         # add new dimension to merge with other pairs
-        D_rl_joint = tf.concat(2, [wavbatch, noisybatch])
-        D_fk_joint = tf.concat(2, [G, noisybatch])
+        D_rl_joint = tf.concat(axis=2, values=[wavbatch, noisybatch])
+        D_fk_joint = tf.concat(axis=2, values=[G, noisybatch])
         # build rl discriminator
         d_rl_logits = discriminator(self, D_rl_joint, reuse=True)
         # build fk G discriminator
@@ -243,8 +244,7 @@ class SEGAN(Model):
         d_loss = d_rl_loss + d_fk_loss
 
         # Add the L1 loss to G
-        g_l1_loss = self.l1_lambda * tf.reduce_mean(tf.abs(tf.sub(G,
-                                                                  wavbatch)))
+        g_l1_loss = self.l1_lambda * tf.reduce_mean(tf.abs(tf.subtract(G, wavbatch)))
 
         g_loss = g_adv_loss + g_l1_loss
 
@@ -279,8 +279,9 @@ class SEGAN(Model):
                 self.d_vars_dict[var.name] = var
             if var.name.startswith('g_'):
                 self.g_vars_dict[var.name] = var
-        self.d_vars = self.d_vars_dict.values()
-        self.g_vars = self.g_vars_dict.values()
+        self.d_vars = list(self.d_vars_dict.values())
+        self.g_vars = list(self.g_vars_dict.values())
+
         for x in self.d_vars:
             assert x not in self.g_vars
         for x in self.g_vars:
@@ -325,7 +326,7 @@ class SEGAN(Model):
             init = tf.global_variables_initializer()
         except AttributeError:
             # fall back to old implementation
-            init = tf.initialize_all_variables()
+            init = tf.global_variables_initializer()
 
         print('Initializing variables...')
         self.sess.run(init)
@@ -505,7 +506,7 @@ class SEGAN(Model):
                         np.savetxt(os.path.join(save_path, 'g_l1_losses.txt'),
                                    g_l1_losses)
 
-                if batch_idx >= num_batches:
+                if batch_idx >= int(num_batches):
                     curr_epoch += 1
                     # re-set batch idx
                     batch_idx = 0
@@ -534,7 +535,7 @@ class SEGAN(Model):
                 if curr_epoch >= config.epoch:
                     # done training
                     print('Done training; epoch limit {} '
-                          'reached.'.format(self.epoch))
+                          'reached.'.format(self.epoch))  
                     print('Saving last model at iteration {}'.format(counter))
                     self.save(config.save_path, counter)
                     self.writer.add_summary(_g_sum, counter)
@@ -671,7 +672,7 @@ class SEAE(Model):
             self.g_losses = []
 
         # Add the L1 loss to G
-        g_loss = tf.reduce_mean(tf.abs(tf.sub(G, wavbatch)))
+        g_loss = tf.reduce_mean(tf.abs(tf.subtract(G, wavbatch)))
 
         self.g_losses.append(g_loss)
 
@@ -699,7 +700,7 @@ class SEAE(Model):
             init = tf.global_variables_initializer()
         except AttributeError:
             # fall back to old implementation
-            init = tf.initialize_all_variables()
+            init = tf.global_variables_initializer()
 
         print('Initializing variables...')
         self.sess.run(init)
@@ -792,7 +793,7 @@ class SEAE(Model):
                             wavfile.write(os.path.join(save_path, 'dif_{}.wav'.format(m)), 16e3, sample_dif[m])
                         np.savetxt(os.path.join(save_path, 'g_losses.txt'), g_losses)
 
-                if batch_idx >= num_batches:
+                if batch_idx >= int(num_batches):
                     curr_epoch += 1
                     # re-set batch idx
                     batch_idx = 0
